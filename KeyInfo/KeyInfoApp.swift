@@ -1,17 +1,22 @@
-//
-//  KeyInfoApp.swift
-//  KeyInfo
-//
-//  Created by Paul Barnes on 12/03/2025.
-//
-
 import SwiftUI
+import SwiftData
 
 @main
 struct KeyInfoApp: App {
+    let container: ModelContainer
+    
+    init() {
+        do {
+            container = try ModelContainer(for: KeyInfoItem.self)
+        } catch {
+            fatalError("Failed to initialize ModelContainer")
+        }
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(container)
     }
-}
+} 
