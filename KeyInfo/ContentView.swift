@@ -17,6 +17,8 @@ struct ContentView: View {
     @State private var showingSortOptions = false
     @State private var lastCopiedValue: String?
     @State private var showCopiedToast = false
+    @State private var showingAboutSheet = false
+    @AppStorage("isGroupedByCategory") private var isGroupedByCategory = true
     
     enum SortOption: String, CaseIterable {
         case label = "Label"
@@ -41,7 +43,11 @@ struct ContentView: View {
                 if filteredItems.isEmpty {
                     emptyStateView
                 } else {
-                    listView
+                    if isGroupedByCategory {
+                        groupedListView
+                    } else {
+                        flatListView
+                    }
                 }
                 
                 // Toast overlay
@@ -72,24 +78,43 @@ struct ContentView: View {
                 }
                 
                 ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Picker("Sort By", selection: $sortOption) {
-                            ForEach(SortOption.allCases, id: \.self) { option in
-                                Label(option.rawValue, systemImage: sortOptionIcon(option))
+                    HStack {
+                        Menu {
+                            Picker("Sort By", selection: $sortOption) {
+                                ForEach(SortOption.allCases, id: \.self) { option in
+                                    Label(option.rawValue, systemImage: sortOptionIcon(option))
+                                }
                             }
+                            
+                            Divider()
+                            
+                            Toggle(isOn: $isGroupedByCategory) {
+                                Label("Group by Category", systemImage: isGroupedByCategory ? "folder.fill" : "list.bullet")
+                            }
+                        } label: {
+                            Label("Sort", systemImage: "arrow.up.arrow.down")
                         }
-                    } label: {
-                        Label("Sort", systemImage: "arrow.up.arrow.down")
+                        
+                        Button {
+                            showingAboutSheet = true
+                        } label: {
+                            Label("About", systemImage: "info.circle")
+                        }
                     }
                 }
             }
             .sheet(isPresented: $showingAddSheet) {
                 AddKeyItemView()
             }
+            .sheet(isPresented: $showingAboutSheet) {
+                NavigationStack {
+                    AboutView()
+                }
+            }
         }
     }
     
-    private var listView: some View {
+    private var groupedListView: some View {
         List {
             ForEach(groupedItems.keys.sorted(), id: \.self) { category in
                 Section(header: Text(category)) {
@@ -108,6 +133,33 @@ struct ContentView: View {
         }
         .animation(.default, value: sortOption)
         .animation(.default, value: searchText)
+    }
+    
+    private var flatListView: some View {
+        List {
+            ForEach(filteredItems) { item in
+                KeyItemRowWithActions(
+                    item: item,
+                    onCopy: { copyToClipboard(item.value) },
+                    onDelete: { deleteItem(item) }
+                )
+            }
+            .onDelete { indexSet in
+                for index in indexSet {
+                    deleteItem(filteredItems[index])
+                }
+            }
+        }
+        .animation(.default, value: sortOption)
+        .animation(.default, value: searchText)
+    }
+    
+    private var listView: some View {
+        if isGroupedByCategory {
+            return AnyView(groupedListView)
+        } else {
+            return AnyView(flatListView)
+        }
     }
     
     private var emptyStateView: some View {
