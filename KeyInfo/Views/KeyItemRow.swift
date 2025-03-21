@@ -4,6 +4,7 @@ struct KeyItemRow: View {
     let item: KeyItem
     @Environment(\.colorScheme) private var colorScheme
     var onLikeToggle: (() -> Void)?
+    var onViewDetails: (() -> Void)?
     
     var body: some View {
         HStack(spacing: 12) {
@@ -30,38 +31,40 @@ struct KeyItemRow: View {
                     
                     Spacer()
                     
+                    // Favorite toggle button
+                    Button {
+                        onLikeToggle?()
+                    } label: {
+                        Image(systemName: item.isLikedSafe ? "star.fill" : "star")
+                            .foregroundStyle(item.isLikedSafe ? .yellow : .gray.opacity(0.5))
+                    }
+                    .buttonStyle(.borderless)
+                    
+                    // Details button
+                    Button {
+                        onViewDetails?()
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .foregroundStyle(.blue)
+                    }
+                    .buttonStyle(.borderless)
+                }
+                
+                HStack {
                     Text(item.category)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(Color(UIColor.tertiarySystemBackground))
-                        )
+                    
+                    Spacer()
+                    
+                    Text(item.value)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                
-                Text(item.value)
-                    .font(.title3.bold())
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(item.color.opacity(colorScheme == .dark ? 0.15 : 0.08))
-                    )
             }
-            
-            Button {
-                onLikeToggle?()
-            } label: {
-                Image(systemName: item.isLikedSafe ? "star.fill" : "star")
-                    .font(.title3)
-                    .foregroundStyle(item.isLikedSafe ? .yellow : .gray)
-            }
-            .buttonStyle(.plain)
         }
+        .contentShape(Rectangle()) // Make the entire row tappable
         .padding(.vertical, 4)
     }
 }
@@ -69,7 +72,8 @@ struct KeyItemRow: View {
 #Preview {
     KeyItemRow(
         item: KeyItem(label: "Test Item", value: "Test Value", iconName: "key.fill"),
-        onLikeToggle: {}
+        onLikeToggle: {},
+        onViewDetails: {}
     )
     .padding()
     .previewLayout(.sizeThatFits)

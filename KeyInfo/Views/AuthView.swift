@@ -8,6 +8,8 @@ struct AuthView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var passcode = ""
     @State private var showingPasscodeEntry = false
+    @AppStorage("useBiometricAuth") private var useBiometricAuth = true
+    @AppStorage("requireAuthenticationOnLaunch") private var requireAuthenticationOnLaunch = true
     
     // Simple passcode for development/simulator use
     private let developerPasscode = "1234"
@@ -79,48 +81,99 @@ struct AuthView: View {
                 } else {
                     // Unlock buttons
                     VStack(spacing: 15) {
-                        // FaceID/TouchID button
-                        Button {
-                            authenticate()
-                        } label: {
-                            HStack {
-                                Image(systemName: "faceid")
-                                Text("Unlock with Biometrics")
-                            }
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(height: 55)
-                            .frame(maxWidth: .infinity)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [.blue, .indigo],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
+                        if requireAuthenticationOnLaunch {
+                            // Show authentication options only if required
+                            if useBiometricAuth {
+                                // FaceID/TouchID button
+                                Button {
+                                    authenticate()
+                                } label: {
+                                    HStack {
+                                        Image(systemName: getBiometricIconName())
+                                        Text("Unlock with Biometrics")
+                                    }
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                    .frame(height: 55)
+                                    .frame(maxWidth: .infinity)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 14)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [.blue, .indigo],
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                )
+                                            )
                                     )
-                            )
-                            .shadow(radius: 5)
-                        }
-                        
-                        // Passcode button
-                        Button {
-                            showingPasscodeEntry = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "key.fill")
-                                Text("Use Passcode")
+                                    .shadow(radius: 5)
+                                }
                             }
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                            .frame(height: 55)
-                            .frame(maxWidth: .infinity)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .fill(.ultraThinMaterial)
-                            )
-                            .shadow(radius: 3)
+                            
+                            // Passcode button
+                            Button {
+                                showingPasscodeEntry = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "key.fill")
+                                    Text("Use Passcode")
+                                }
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                                .frame(height: 55)
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(.ultraThinMaterial)
+                                )
+                                .shadow(radius: 3)
+                            }
+                        } else {
+                            // Simple enter button when authentication is not required
+                            Button {
+                                isUnlocked = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "arrow.right.circle.fill")
+                                    Text("Enter App")
+                                }
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .frame(height: 55)
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: [.blue, .green],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                )
+                                .shadow(radius: 5)
+                            }
+                            
+                            if useBiometricAuth {
+                                // Optional biometric button for convenience
+                                Button {
+                                    authenticate()
+                                } label: {
+                                    HStack {
+                                        Image(systemName: getBiometricIconName())
+                                        Text("Quick Unlock")
+                                    }
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+                                    .frame(height: 55)
+                                    .frame(maxWidth: .infinity)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 14)
+                                            .fill(.ultraThinMaterial)
+                                    )
+                                    .shadow(radius: 3)
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 24)
@@ -132,18 +185,46 @@ struct AuthView: View {
             .alert("Authentication Failed", isPresented: $showingAlert) {
                 Button("OK") { 
                     // Show passcode entry after biometric failure
-                    showingPasscodeEntry = true
+                    if requireAuthenticationOnLaunch {
+                        showingPasscodeEntry = true
+                    }
                 }
             } message: {
                 Text(authError ?? "Please try again")
             }
         }
         .onAppear {
-            // Automatically attempt authentication when view appears
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                authenticate()
+            // If authentication is required, attempt to authenticate
+            if requireAuthenticationOnLaunch {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if useBiometricAuth {
+                        authenticate()
+                    } else {
+                        // If biometric auth is disabled, show passcode screen
+                        showingPasscodeEntry = true
+                    }
+                }
+            }
+            // Otherwise, just show the welcome screen with Enter App button
+        }
+    }
+    
+    private func getBiometricIconName() -> String {
+        let context = LAContext()
+        var error: NSError?
+        
+        if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+            switch context.biometryType {
+            case .faceID:
+                return "faceid"
+            case .touchID:
+                return "touchid"
+            default:
+                return "lock.fill"
             }
         }
+        
+        return "lock.fill"
     }
     
     private func authenticate() {

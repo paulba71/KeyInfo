@@ -12,6 +12,10 @@ struct ContentView: View {
     @State private var showCopiedToast = false
     @State private var showingAboutSheet = false
     @AppStorage("isGroupedByCategory") private var isGroupedByCategory = true
+    @State private var showingSettingsSheet = false
+    @State private var activeItem: KeyItem?
+    @State private var showingDetailSheet = false
+    @State private var editModeActive = false
     
     enum SortOption: String, CaseIterable {
         case label = "Label"
@@ -64,14 +68,14 @@ struct ContentView: View {
             .navigationTitle("Key Info")
             .searchable(text: $searchText, prompt: "Search items...")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showingAddSheet = true }) {
-                        Label("Add Item", systemImage: "plus.circle.fill")
-                    }
-                }
-                
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     HStack {
+                        Button {
+                            showingSettingsSheet = true
+                        } label: {
+                            Image(systemName: "gear")
+                        }
+                        
                         Menu {
                             Picker("Sort By", selection: $sortOption) {
                                 ForEach(SortOption.allCases, id: \.self) { option in
@@ -85,7 +89,7 @@ struct ContentView: View {
                                 Label("Group by Category", systemImage: isGroupedByCategory ? "folder.fill" : "list.bullet")
                             }
                         } label: {
-                            Label("Sort", systemImage: "arrow.up.arrow.down")
+                            Image(systemName: "line.3.horizontal.decrease.circle")
                         }
                         
                         Button {
@@ -95,6 +99,14 @@ struct ContentView: View {
                         }
                     }
                 }
+                
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingAddSheet = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
             }
             .sheet(isPresented: $showingAddSheet) {
                 AddKeyItemView()
@@ -102,6 +114,24 @@ struct ContentView: View {
             .sheet(isPresented: $showingAboutSheet) {
                 NavigationStack {
                     AboutView()
+                }
+            }
+            .sheet(isPresented: $showingSettingsSheet) {
+                SettingsView()
+            }
+            .sheet(isPresented: $showingDetailSheet) {
+                if let item = activeItem {
+                    NavigationStack {
+                        DetailView(
+                            item: item,
+                            onDelete: { 
+                                deleteItem(item)
+                                showingDetailSheet = false
+                            },
+                            startEditing: editModeActive,
+                            isReadOnly: !editModeActive
+                        )
+                    }
                 }
             }
         }
@@ -114,12 +144,42 @@ struct ContentView: View {
             if !favorites.isEmpty {
                 Section(header: Text("⭐ Favorites")) {
                     ForEach(favorites) { item in
-                        KeyItemRowWithActions(
-                            item: item,
-                            onCopy: { copyToClipboard(item.value) },
-                            onDelete: { deleteItem(item) },
-                            onLikeToggle: { toggleLike(item) }
-                        )
+                        ZStack {
+                            NavigationLink(destination: DetailView(
+                                item: item, 
+                                onDelete: { deleteItem(item) },
+                                isReadOnly: true
+                            )) {
+                                EmptyView()
+                            }
+                            .opacity(0)
+                            .buttonStyle(.plain)
+                            
+                            KeyItemRow(item: item, onLikeToggle: {
+                                toggleLike(item)
+                            }, onViewDetails: {
+                                // We use a programmatic approach to trigger the navigation
+                                navigateToItem(item)
+                            })
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                copyToClipboard(item.value)
+                            }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                deleteItem(item)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            
+                            Button {
+                                navigateToItem(item, startEditing: true)
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+                            .tint(.blue)
+                        }
                     }
                     .onDelete { indexSet in
                         for index in indexSet {
@@ -129,16 +189,46 @@ struct ContentView: View {
                 }
             }
             
-            // Regular category groups (keep the existing logic)
+            // Regular category groups
             ForEach(groupedItems.keys.sorted(), id: \.self) { category in
                 Section(header: Text(category)) {
                     ForEach(groupedItems[category] ?? []) { item in
-                        KeyItemRowWithActions(
-                            item: item,
-                            onCopy: { copyToClipboard(item.value) },
-                            onDelete: { deleteItem(item) },
-                            onLikeToggle: { toggleLike(item) }
-                        )
+                        ZStack {
+                            NavigationLink(destination: DetailView(
+                                item: item, 
+                                onDelete: { deleteItem(item) },
+                                isReadOnly: true
+                            )) {
+                                EmptyView()
+                            }
+                            .opacity(0)
+                            .buttonStyle(.plain)
+                            
+                            KeyItemRow(item: item, onLikeToggle: {
+                                toggleLike(item)
+                            }, onViewDetails: {
+                                // We use a programmatic approach to trigger the navigation
+                                navigateToItem(item)
+                            })
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                copyToClipboard(item.value)
+                            }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                deleteItem(item)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            
+                            Button {
+                                navigateToItem(item, startEditing: true)
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+                            .tint(.blue)
+                        }
                     }
                     .onDelete { indexSet in
                         deleteItems(from: category, at: indexSet)
@@ -148,26 +238,53 @@ struct ContentView: View {
         }
         .animation(.default, value: sortOption)
         .animation(.default, value: searchText)
+        .listStyle(.insetGrouped)
     }
     
     private var flatListView: some View {
         List {
             ForEach(filteredItems) { item in
-                KeyItemRowWithActions(
-                    item: item,
-                    onCopy: { copyToClipboard(item.value) },
-                    onDelete: { deleteItem(item) },
-                    onLikeToggle: { toggleLike(item) }
-                )
-            }
-            .onDelete { indexSet in
-                for index in indexSet {
-                    deleteItem(filteredItems[index])
+                ZStack {
+                    NavigationLink(destination: DetailView(
+                        item: item, 
+                        onDelete: { deleteItem(item) },
+                        isReadOnly: true
+                    )) {
+                        EmptyView()
+                    }
+                    .opacity(0)
+                    .buttonStyle(.plain)
+                    
+                    KeyItemRow(item: item, onLikeToggle: {
+                        toggleLike(item)
+                    }, onViewDetails: {
+                        // We use a programmatic approach to trigger the navigation
+                        navigateToItem(item)
+                    })
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        copyToClipboard(item.value)
+                    }
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        deleteItem(item)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    
+                    Button {
+                        navigateToItem(item, startEditing: true)
+                    } label: {
+                        Label("Edit", systemImage: "pencil")
+                    }
+                    .tint(.blue)
                 }
             }
         }
         .animation(.default, value: sortOption)
         .animation(.default, value: searchText)
+        .listStyle(.insetGrouped)
     }
     
     private var emptyStateView: some View {
@@ -312,6 +429,22 @@ struct ContentView: View {
         } catch {
             print("Error saving like status: \(error.localizedDescription)")
         }
+    }
+    
+    // Add these helper methods for navigation
+    private func navigateToItem(_ item: KeyItem, startEditing: Bool = false) {
+        activeItem = item
+        editModeActive = startEditing
+        showingDetailSheet = true
+    }
+    
+    private func navigateToDetails(_ item: KeyItem) {
+        // We rely on the NavigationLink to handle the navigation
+        // The onViewDetails callback is just to capture the tap
+    }
+    
+    private func navigateToEdit(_ item: KeyItem) {
+        // Implementation will use the NavigationLink but with edit mode enabled
     }
 }
 

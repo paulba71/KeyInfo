@@ -14,15 +14,17 @@ struct DetailView: View {
     
     let item: KeyItem
     var onDelete: () -> Void
+    var isReadOnly: Bool
     
-    init(item: KeyItem, onDelete: @escaping () -> Void, startEditing: Bool = false) {
+    init(item: KeyItem, onDelete: @escaping () -> Void, startEditing: Bool = false, isReadOnly: Bool = false) {
         self.item = item
         self.onDelete = onDelete
+        self.isReadOnly = isReadOnly
         _editedLabel = State(initialValue: item.label)
         _editedValue = State(initialValue: item.value)
         _editedCategory = State(initialValue: item.category)
         _editedColorName = State(initialValue: item.colorName)
-        _isEditing = State(initialValue: startEditing)
+        _isEditing = State(initialValue: startEditing && !isReadOnly)
     }
     
     var body: some View {
@@ -32,118 +34,188 @@ struct DetailView: View {
                 ZStack {
                     Circle()
                         .fill(item.color.opacity(colorScheme == .dark ? 0.2 : 0.1))
-                        .frame(width: 120, height: 120)
+                        .frame(width: 100, height: 100)
                     
                     Image(systemName: item.iconName)
                         .font(.system(size: 50))
                         .foregroundStyle(item.color)
                 }
-                .padding(.top, 20)
+                .padding(.top)
                 
                 // Content
-                VStack(spacing: 30) {
+                VStack(spacing: 25) {
                     if isEditing {
-                        editingView
+                        // Edit mode
+                        editForm
                     } else {
-                        displayView
+                        // View mode
+                        detailsCard
                     }
                 }
                 .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(UIColor.secondarySystemBackground))
-                )
-                .padding(.horizontal)
+                
+                Spacer()
+            }
+            .navigationTitle(isEditing ? "Edit Item" : "Item Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack {
+                        if !isReadOnly {
+                            if isEditing {
+                                Button("Cancel") {
+                                    isEditing = false
+                                    resetEditedValues()
+                                }
+                                
+                                Button("Save") {
+                                    saveChanges()
+                                    isEditing = false
+                                }
+                                .bold()
+                            } else {
+                                Button("Edit") {
+                                    isEditing = true
+                                }
+                                
+                                Menu {
+                                    Button(role: .destructive) {
+                                        showingDeleteAlert = true
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle")
+                                }
+                            }
+                        } else {
+                            // Read-only mode - show copy option
+                            Button {
+                                UIPasteboard.general.string = item.value
+                                withAnimation {
+                                    showCopiedMessage = true
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    withAnimation {
+                                        showCopiedMessage = false
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                            }
+                            
+                            if !isEditing {
+                                Button {
+                                    isEditing = true
+                                } label: {
+                                    Image(systemName: "pencil")
+                                }
+                                .disabled(isReadOnly)
+                            }
+                        }
+                    }
+                }
+            }
+            .overlay(
+                // Copy confirmation toast
+                Group {
+                    if showCopiedMessage {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text("Copied to clipboard")
+                            }
+                            .padding()
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(10)
+                            .shadow(radius: 3)
+                            .padding(.bottom, 20)
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+            )
+            .alert("Delete Item?", isPresented: $showingDeleteAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    dismiss()
+                    onDelete()
+                }
+            } message: {
+                Text("Are you sure you want to delete this item? This action cannot be undone.")
             }
         }
-        .navigationTitle(isEditing ? "Edit Item" : item.label)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                if isEditing {
-                    Button("Save") {
-                        saveChanges()
-                    }
-                } else {
-                    Menu {
-                        Button(action: { isEditing = true }) {
-                            Label("Edit", systemImage: "pencil")
+    }
+    
+    // Read-only details card
+    private var detailsCard: some View {
+        VStack(spacing: 20) {
+            detailRow(title: "Label", value: item.label, systemImage: "tag")
+            
+            detailRow(title: "Value", value: item.value, systemImage: "doc.text", isCopyable: true)
+            
+            detailRow(title: "Category", value: item.category, systemImage: "folder")
+            
+            detailRow(
+                title: "Created",
+                value: item.dateCreated.formatted(date: .abbreviated, time: .shortened),
+                systemImage: "calendar"
+            )
+            
+            if item.isLikedSafe {
+                HStack {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(.yellow)
+                    Text("Favorite")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(10)
+            }
+        }
+    }
+    
+    private func detailRow(title: String, value: String, systemImage: String, isCopyable: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(title, systemImage: systemImage)
+                    .font(.headline)
+                
+                Spacer()
+                
+                if isCopyable {
+                    Button {
+                        UIPasteboard.general.string = value
+                        withAnimation {
+                            showCopiedMessage = true
                         }
-                        
-                        Button(role: .destructive, action: { showingDeleteAlert = true }) {
-                            Label("Delete", systemImage: "trash")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                showCopiedMessage = false
+                            }
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
-            }
-            
-            if isEditing {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        isEditing = false
-                        // Reset edited values
-                        editedLabel = item.label
-                        editedValue = item.value
-                        editedCategory = item.category
-                        editedColorName = item.colorName
-                    }
-                }
-            }
-        }
-        .alert("Delete Item", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                onDelete()
-                dismiss()
-            }
-        } message: {
-            Text("Are you sure you want to delete this item? This action cannot be undone.")
-        }
-    }
-    
-    private var displayView: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            infoRow(title: "Label", value: item.label, iconName: "tag")
-            
-            VStack(alignment: .leading) {
-                HStack {
-                    Label("Value", systemImage: "doc.text")
-                        .font(.headline)
-                    Spacer()
-                    Button(action: copyValueToClipboard) {
                         Image(systemName: "doc.on.doc")
-                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
                     }
+                    .buttonStyle(.borderless)
                 }
-                
-                Text(item.value)
-                    .padding(.top, 4)
-                    .textSelection(.enabled)
-                    .overlay(alignment: .trailing) {
-                        if showCopiedMessage {
-                            Text("Copied!")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    Capsule()
-                                        .fill(Color(UIColor.tertiarySystemBackground))
-                                )
-                                .transition(.scale.combined(with: .opacity))
-                        }
-                    }
             }
             
-            infoRow(title: "Category", value: item.category, iconName: "folder")
-            
-            infoRow(title: "Date Added", value: item.dateCreated.formatted(date: .abbreviated, time: .shortened), iconName: "calendar")
+            Text(value)
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(10)
         }
     }
     
-    private var editingView: some View {
+    // Edit form
+    private var editForm: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading) {
                 Text("Label")
@@ -202,29 +274,11 @@ struct DetailView: View {
         }
     }
     
-    private func infoRow(title: String, value: String, iconName: String) -> some View {
-        VStack(alignment: .leading) {
-            Label(title, systemImage: iconName)
-                .font(.headline)
-            
-            Text(value)
-                .padding(.top, 4)
-        }
-    }
-    
-    private func copyValueToClipboard() {
-        UIPasteboard.general.string = item.value
-        
-        withAnimation {
-            showCopiedMessage = true
-        }
-        
-        // Hide the message after 2 seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation {
-                showCopiedMessage = false
-            }
-        }
+    private func resetEditedValues() {
+        editedLabel = item.label
+        editedValue = item.value
+        editedCategory = item.category
+        editedColorName = item.colorName
     }
     
     private func saveChanges() {
