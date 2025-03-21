@@ -14,13 +14,14 @@ struct DetailView: View {
     let item: KeyItem
     var onDelete: () -> Void
     
-    init(item: KeyItem, onDelete: @escaping () -> Void) {
+    init(item: KeyItem, onDelete: @escaping () -> Void, startEditing: Bool = false) {
         self.item = item
         self.onDelete = onDelete
         _editedLabel = State(initialValue: item.label)
         _editedValue = State(initialValue: item.value)
         _editedCategory = State(initialValue: item.category)
         _editedColorName = State(initialValue: item.colorName)
+        _isEditing = State(initialValue: startEditing)
     }
     
     var body: some View {

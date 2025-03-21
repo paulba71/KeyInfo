@@ -11,6 +11,7 @@ struct AddKeyItemView: View {
     @State private var category = "General"
     @State private var selectedColor = "blue"
     @State private var showingAdvancedOptions = false
+    @State private var isCustomLabel = false
     
     // Predefined categories
     let categories = ["General", "Personal", "Financial", "Work", "Home", "Travel", "Security"]
@@ -19,55 +20,84 @@ struct AddKeyItemView: View {
         case license = "Driver License"
         case pps = "PPS Number"
         case eircode = "Eircode"
+        case postcode = "Postcode"
+        case zipcode = "Zipcode"
         case locker = "Locker Code"
-        case passport = "Passport"
+        case passport = "Passport Number"
+        case ssn = "Social Security Number"
+        case ni = "National Insurance Number"
+        case pin = "PIN Code"
         case bankAccount = "Bank Account"
         case creditCard = "Credit Card"
         case wifi = "WiFi Password"
         case email = "Email Account"
+        case username = "Username"
         case phone = "Phone Number"
+        case blood = "Blood Type"
+        case medical = "Medical Number"
+        case gpPhone = "GP Phone Number"
+        case studentID = "Student ID"
         case insurance = "Insurance"
-        case membership = "Membership"
+        case membership = "Membership Number"
+        case petLicense = "Pet License Number"
+        case carReg = "Car Registration"
+        case generic = "Generic"
         case custom = "Custom"
         
         var iconName: String {
             switch self {
             case .license: return "car.fill"
             case .pps: return "person.text.rectangle.fill"
-            case .eircode: return "house.fill"
-            case .locker: return "lock.fill"
+            case .eircode, .postcode, .zipcode: return "house.fill"
+            case .locker, .pin: return "lock.fill"
             case .passport: return "airplane"
+            case .ssn, .ni: return "person.badge.key.fill"
             case .bankAccount: return "banknote.fill"
             case .creditCard: return "creditcard.fill"
             case .wifi: return "wifi"
             case .email: return "envelope.fill"
-            case .phone: return "phone.fill"
+            case .username: return "person.crop.circle.fill"
+            case .phone, .gpPhone: return "phone.fill"
+            case .blood: return "drop.fill"
+            case .medical: return "cross.case.fill"
+            case .studentID: return "graduationcap.fill"
             case .insurance: return "checkmark.shield.fill"
             case .membership: return "person.2.fill"
+            case .petLicense: return "pawprint.fill"
+            case .carReg: return "car.2.fill"
+            case .generic: return "questionmark.app.fill"
             case .custom: return "doc.fill"
             }
         }
         
         var suggestedCategory: String {
             switch self {
-            case .license, .pps, .passport: return "Personal"
+            case .license, .pps, .passport, .ssn, .ni, .studentID: return "Personal"
             case .bankAccount, .creditCard, .insurance: return "Financial"
-            case .eircode, .wifi: return "Home"
-            case .locker: return "Security"
-            case .email, .phone: return "Contact"
+            case .eircode, .postcode, .zipcode, .wifi: return "Home"
+            case .locker, .pin: return "Security"
+            case .email, .phone, .username, .gpPhone: return "Contact"
+            case .blood, .medical: return "Medical"
             case .membership: return "Membership"
+            case .petLicense: return "Pets"
+            case .carReg: return "Vehicle"
+            case .generic: return "Other"
             default: return "General"
             }
         }
         
         var suggestedColor: String {
             switch self {
-            case .license, .pps, .passport: return "blue"
+            case .license, .pps, .passport, .ssn, .ni, .studentID: return "blue"
             case .bankAccount, .creditCard: return "green"
-            case .eircode, .wifi: return "orange"
-            case .locker, .insurance: return "red"
-            case .email, .phone: return "teal"
+            case .eircode, .postcode, .zipcode, .wifi: return "orange"
+            case .locker, .pin, .insurance: return "red"
+            case .email, .phone, .username, .gpPhone: return "teal"
+            case .blood, .medical: return "pink"
             case .membership: return "purple"
+            case .petLicense: return "brown"
+            case .carReg: return "indigo"
+            case .generic: return "mint"
             default: return "blue"
             }
         }
@@ -84,18 +114,19 @@ struct AddKeyItemView: View {
                     }
                     .pickerStyle(.navigationLink)
                     .onChange(of: selectedType) {
-                        if selectedType != .custom {
+                        if !isCustomLabel {
                             label = selectedType.rawValue
-                            category = selectedType.suggestedCategory
-                            selectedColor = selectedType.suggestedColor
                         }
+                        category = selectedType.suggestedCategory
+                        selectedColor = selectedType.suggestedColor
                     }
                 }
                 
                 Section("Details") {
-                    if selectedType == .custom {
-                        TextField("Label", text: $label)
-                    }
+                    TextField("Label", text: $label)
+                        .onChange(of: label) {
+                            isCustomLabel = label != selectedType.rawValue
+                        }
                     
                     TextField("Value", text: $value)
                         .textContentType(contentType)
@@ -148,14 +179,18 @@ struct AddKeyItemView: View {
         switch selectedType {
         case .license: return .username
         case .pps: return .username
-        case .eircode: return .postalCode
+        case .eircode, .postcode, .zipcode: return .postalCode
         case .passport: return .username
+        case .ssn, .ni, .medical, .studentID, .petLicense: return .username
         case .bankAccount: return .username
         case .creditCard: return .creditCardNumber
         case .wifi: return .password
         case .email: return .emailAddress
-        case .phone: return .telephoneNumber
-        case .insurance: return .username
+        case .username: return .username
+        case .phone, .gpPhone: return .telephoneNumber
+        case .pin: return .password
+        case .blood: return nil
+        case .insurance: return .username 
         case .membership: return .username
         default: return nil
         }
@@ -163,11 +198,14 @@ struct AddKeyItemView: View {
     
     private var keyboardType: UIKeyboardType {
         switch selectedType {
-        case .phone: return .phonePad
-        case .eircode: return .asciiCapable
+        case .phone, .gpPhone: return .phonePad
+        case .eircode, .postcode, .zipcode: return .asciiCapable
         case .email: return .emailAddress
         case .creditCard: return .numberPad
-        case .locker: return .numberPad
+        case .locker, .pin: return .numberPad
+        case .ssn, .ni, .medical, .studentID, .membership, .petLicense: return .default
+        case .blood: return .default
+        case .bankAccount: return .numbersAndPunctuation
         default: return .default
         }
     }

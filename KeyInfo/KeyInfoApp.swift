@@ -4,10 +4,11 @@ import SwiftData
 @main
 struct KeyInfoApp: App {
     let container: ModelContainer
+    @State private var isUnlocked = false
     
     init() {
         do {
-            container = try ModelContainer(for: KeyInfoItem.self)
+            container = try ModelContainer(for: KeyItem.self)
         } catch {
             fatalError("Failed to initialize ModelContainer")
         }
@@ -15,8 +16,12 @@ struct KeyInfoApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if isUnlocked {
+                ContentView()
+                    .modelContainer(container)
+            } else {
+                AuthView(isUnlocked: $isUnlocked)
+            }
         }
-        .modelContainer(container)
     }
 } 

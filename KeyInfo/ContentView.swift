@@ -10,11 +10,13 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [KeyItem]
+    @Query(sort: \KeyItem.dateCreated, order: .reverse) private var items: [KeyItem]
     @State private var showingAddSheet = false
     @State private var searchText = ""
     @State private var sortOption: SortOption = .label
     @State private var showingSortOptions = false
+    @State private var lastCopiedValue: String?
+    @State private var showCopiedToast = false
     
     enum SortOption: String, CaseIterable {
         case label = "Label"
@@ -40,6 +42,24 @@ struct ContentView: View {
                     emptyStateView
                 } else {
                     listView
+                }
+                
+                // Toast overlay
+                if showCopiedToast, let value = lastCopiedValue {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Image(systemName: "doc.on.doc.fill")
+                            Text("Copied: \(value)")
+                                .lineLimit(1)
+                        }
+                        .padding()
+                        .background(Color(UIColor.systemBackground))
+                        .cornerRadius(10)
+                        .shadow(radius: 5)
+                        .padding(.bottom, 20)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                 }
             }
             .navigationTitle("Key Info")
@@ -74,9 +94,11 @@ struct ContentView: View {
             ForEach(groupedItems.keys.sorted(), id: \.self) { category in
                 Section(header: Text(category)) {
                     ForEach(groupedItems[category] ?? []) { item in
-                        NavigationLink(destination: DetailView(item: item, onDelete: { deleteItem(item) })) {
-                            KeyItemRow(item: item)
-                        }
+                        KeyItemRowWithActions(
+                            item: item,
+                            onCopy: { copyToClipboard(item.value) },
+                            onDelete: { deleteItem(item) }
+                        )
                     }
                     .onDelete { indexSet in
                         deleteItems(from: category, at: indexSet)
@@ -166,6 +188,22 @@ struct ContentView: View {
     private func deleteItem(_ item: KeyItem) {
         modelContext.delete(item)
     }
+    
+    private func copyToClipboard(_ value: String) {
+        UIPasteboard.general.string = value
+        lastCopiedValue = value
+        
+        withAnimation {
+            showCopiedToast = true
+        }
+        
+        // Hide the toast after 2 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            withAnimation {
+                showCopiedToast = false
+            }
+        }
+    }
 }
 
 struct KeyItemRow: View {
@@ -209,6 +247,66 @@ struct KeyItemRow: View {
             }
         }
         .padding(.vertical, 8)
+    }
+}
+
+struct KeyItemRowWithActions: View {
+    let item: KeyItem
+    let onCopy: () -> Void
+    let onDelete: () -> Void
+    
+    var body: some View {
+        Button {
+            onCopy()
+        } label: {
+            KeyItemRow(item: item)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .contextMenu {
+            Button {
+                onCopy()
+            } label: {
+                Label("Copy Value", systemImage: "doc.on.doc")
+            }
+            
+            NavigationLink {
+                DetailView(item: item, onDelete: onDelete, startEditing: true)
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            
+            NavigationLink {
+                DetailView(item: item, onDelete: onDelete, startEditing: true)
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .tint(.blue)
+        }
+    }
+}
+
+#Preview("KeyItemRowWithActions") {
+    NavigationStack {
+        List {
+            KeyItemRowWithActions(
+                item: KeyItem(label: "Test Item", value: "Test Value", iconName: "key.fill"),
+                onCopy: {},
+                onDelete: {}
+            )
+        }
     }
 }
 
