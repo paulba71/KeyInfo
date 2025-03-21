@@ -154,14 +154,6 @@ struct ContentView: View {
         .animation(.default, value: searchText)
     }
     
-    private var listView: some View {
-        if isGroupedByCategory {
-            return AnyView(groupedListView)
-        } else {
-            return AnyView(flatListView)
-        }
-    }
-    
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             if searchText.isEmpty {
