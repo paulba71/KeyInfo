@@ -242,4 +242,13 @@ struct DetailView: View {
         
         isEditing = false
     }
+}
+
+#Preview {
+    NavigationStack {
+        DetailView(
+            item: KeyItem(label: "Test Item", value: "Test Value", iconName: "key.fill"),
+            onDelete: {}
+        )
+    }
 } 
