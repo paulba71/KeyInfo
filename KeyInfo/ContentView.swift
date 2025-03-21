@@ -255,7 +255,7 @@ struct KeyItemRow: View {
     @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             ZStack {
                 Circle()
                     .fill(item.color.opacity(colorScheme == .dark ? 0.2 : 0.1))
@@ -266,11 +266,13 @@ struct KeyItemRow: View {
                     .foregroundStyle(item.color)
             }
             
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.label)
-                    .font(.headline)
-                
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
+                    Text(item.label)
+                        .font(.headline)
+                    
+                    Spacer()
+                    
                     Text(item.category)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -280,17 +282,21 @@ struct KeyItemRow: View {
                             Capsule()
                                 .fill(Color(UIColor.tertiarySystemBackground))
                         )
-                    
-                    Spacer()
-                    
-                    Text(item.value)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
+                
+                Text(item.value)
+                    .font(.title3.bold())
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(item.color.opacity(colorScheme == .dark ? 0.15 : 0.08))
+                    )
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
     }
 }
 
