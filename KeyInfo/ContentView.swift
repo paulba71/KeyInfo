@@ -116,13 +116,35 @@ struct ContentView: View {
     
     private var groupedListView: some View {
         List {
+            // Add a "Favorites" section at the top containing all liked items
+            let favorites = filteredItems.filter { $0.isLikedSafe }
+            if !favorites.isEmpty {
+                Section(header: Text("⭐ Favorites")) {
+                    ForEach(favorites) { item in
+                        KeyItemRowWithActions(
+                            item: item,
+                            onCopy: { copyToClipboard(item.value) },
+                            onDelete: { deleteItem(item) },
+                            onLikeToggle: { toggleLike(item) }
+                        )
+                    }
+                    .onDelete { indexSet in
+                        for index in indexSet {
+                            deleteItem(favorites[index])
+                        }
+                    }
+                }
+            }
+            
+            // Regular category groups (keep the existing logic)
             ForEach(groupedItems.keys.sorted(), id: \.self) { category in
                 Section(header: Text(category)) {
                     ForEach(groupedItems[category] ?? []) { item in
                         KeyItemRowWithActions(
                             item: item,
                             onCopy: { copyToClipboard(item.value) },
-                            onDelete: { deleteItem(item) }
+                            onDelete: { deleteItem(item) },
+                            onLikeToggle: { toggleLike(item) }
                         )
                     }
                     .onDelete { indexSet in
@@ -141,7 +163,8 @@ struct ContentView: View {
                 KeyItemRowWithActions(
                     item: item,
                     onCopy: { copyToClipboard(item.value) },
-                    onDelete: { deleteItem(item) }
+                    onDelete: { deleteItem(item) },
+                    onLikeToggle: { toggleLike(item) }
                 )
             }
             .onDelete { indexSet in
@@ -195,7 +218,22 @@ struct ContentView: View {
     }
     
     private var filteredItems: [KeyItem] {
-        let sortedItems = items.sorted(using: sortOption.sortDescriptor)
+        // First sort by liked status, then by the selected sort option
+        let sortedItems = items.sorted {
+            if $0.isLikedSafe != $1.isLikedSafe {
+                return $0.isLikedSafe && !$1.isLikedSafe
+            }
+            
+            // If like status is the same, use the selected sort option
+            switch sortOption {
+            case .label:
+                return $0.label < $1.label
+            case .dateCreated:
+                return $0.dateCreated > $1.dateCreated
+            case .category:
+                return $0.category < $1.category
+            }
+        }
         
         if searchText.isEmpty {
             return sortedItems
@@ -209,7 +247,29 @@ struct ContentView: View {
     }
     
     private var groupedItems: [String: [KeyItem]] {
-        Dictionary(grouping: filteredItems) { $0.category }
+        // Group items by category
+        let grouped = Dictionary(grouping: filteredItems) { $0.category }
+        
+        // Sort items within each category to keep liked items at the top
+        var sortedGrouped = [String: [KeyItem]]()
+        for (category, items) in grouped {
+            sortedGrouped[category] = items.sorted {
+                if $0.isLikedSafe != $1.isLikedSafe {
+                    return $0.isLikedSafe && !$1.isLikedSafe
+                }
+                // Secondary sort based on the selected sort option
+                switch sortOption {
+                case .label:
+                    return $0.label < $1.label
+                case .dateCreated:
+                    return $0.dateCreated > $1.dateCreated
+                case .category:
+                    return $0.label < $1.label // Fall back to label when already sorted by category
+                }
+            }
+        }
+        
+        return sortedGrouped
     }
     
     private func sortOptionIcon(_ option: SortOption) -> String {
@@ -248,11 +308,24 @@ struct ContentView: View {
             }
         }
     }
+    
+    private func toggleLike(_ item: KeyItem) {
+        // Toggle the isLiked value, handling the optional properly
+        item.isLiked = !(item.isLiked ?? false)
+        
+        // Explicitly save changes to ensure persistence
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving like status: \(error.localizedDescription)")
+        }
+    }
 }
 
 struct KeyItemRow: View {
     let item: KeyItem
     @Environment(\.colorScheme) private var colorScheme
+    var onLikeToggle: (() -> Void)?
     
     var body: some View {
         HStack(spacing: 12) {
@@ -268,6 +341,12 @@ struct KeyItemRow: View {
             
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
+                    if item.isLikedSafe {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
+                            .font(.caption)
+                    }
+                    
                     Text(item.label)
                         .font(.headline)
                     
@@ -295,6 +374,15 @@ struct KeyItemRow: View {
                             .fill(item.color.opacity(colorScheme == .dark ? 0.15 : 0.08))
                     )
             }
+            
+            Button {
+                onLikeToggle?()
+            } label: {
+                Image(systemName: item.isLikedSafe ? "star.fill" : "star")
+                    .font(.title3)
+                    .foregroundStyle(item.isLikedSafe ? .yellow : .gray)
+            }
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 4)
     }
@@ -304,12 +392,13 @@ struct KeyItemRowWithActions: View {
     let item: KeyItem
     let onCopy: () -> Void
     let onDelete: () -> Void
+    let onLikeToggle: () -> Void
     
     var body: some View {
         Button {
             onCopy()
         } label: {
-            KeyItemRow(item: item)
+            KeyItemRow(item: item, onLikeToggle: onLikeToggle)
         }
         .buttonStyle(PlainButtonStyle())
         .contextMenu {
@@ -317,6 +406,12 @@ struct KeyItemRowWithActions: View {
                 onCopy()
             } label: {
                 Label("Copy Value", systemImage: "doc.on.doc")
+            }
+            
+            Button {
+                onLikeToggle()
+            } label: {
+                Label((item.isLikedSafe) ? "Unlike" : "Like", systemImage: (item.isLikedSafe) ? "star.slash" : "star")
             }
             
             NavigationLink {
@@ -345,6 +440,14 @@ struct KeyItemRowWithActions: View {
             }
             .tint(.blue)
         }
+        .swipeActions(edge: .leading) {
+            Button {
+                onLikeToggle()
+            } label: {
+                Label((item.isLikedSafe) ? "Unlike" : "Like", systemImage: (item.isLikedSafe) ? "star.slash" : "star")
+            }
+            .tint(.yellow)
+        }
     }
 }
 
@@ -354,7 +457,8 @@ struct KeyItemRowWithActions: View {
             KeyItemRowWithActions(
                 item: KeyItem(label: "Test Item", value: "Test Value", iconName: "key.fill"),
                 onCopy: {},
-                onDelete: {}
+                onDelete: {},
+                onLikeToggle: {}
             )
         }
     }

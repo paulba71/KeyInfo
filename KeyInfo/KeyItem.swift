@@ -10,14 +10,21 @@ final class KeyItem {
     var dateCreated: Date
     var category: String
     var colorName: String
+    var isLiked: Bool?
     
-    init(label: String, value: String, iconName: String, category: String = "General", colorName: String = "blue") {
+    init(label: String, value: String, iconName: String, category: String = "General", colorName: String = "blue", isLiked: Bool = false) {
         self.label = label
         self.value = value
         self.iconName = iconName
         self.dateCreated = Date()
         self.category = category
         self.colorName = colorName
+        self.isLiked = isLiked
+    }
+    
+    // Computed property to safely handle the optional isLiked value
+    var isLikedSafe: Bool {
+        return isLiked ?? false
     }
 }
 
