@@ -3,6 +3,7 @@ import SwiftUI
 struct DetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.modelContext) private var modelContext
     @State private var isEditing = false
     @State private var showingDeleteAlert = false
     @State private var editedLabel: String
@@ -231,6 +232,14 @@ struct DetailView: View {
         item.value = editedValue
         item.category = editedCategory
         item.colorName = editedColorName
+        
+        // Explicitly save changes to ensure persistence
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving changes: \(error.localizedDescription)")
+        }
+        
         isEditing = false
     }
 } 

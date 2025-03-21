@@ -8,7 +8,9 @@ struct KeyInfoApp: App {
     
     init() {
         do {
-            container = try ModelContainer(for: KeyItem.self)
+            // Configure SwiftData with optimized saving behavior
+            let configuration = ModelConfiguration(isStoredInMemoryOnly: false, allowsSave: true)
+            container = try ModelContainer(for: KeyItem.self, configurations: configuration)
         } catch {
             fatalError("Failed to initialize ModelContainer")
         }

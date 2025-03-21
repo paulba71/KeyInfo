@@ -108,7 +108,7 @@ struct AddKeyItemView: View {
             Form {
                 Section("Item Type") {
                     Picker("Type", selection: $selectedType) {
-                        ForEach(ItemType.allCases, id: \.self) { type in
+                        ForEach(ItemType.allCases.sorted(by: { $0.rawValue < $1.rawValue }), id: \.self) { type in
                             Label(type.rawValue, systemImage: type.iconName)
                         }
                     }
@@ -239,6 +239,14 @@ struct AddKeyItemView: View {
             colorName: selectedColor
         )
         modelContext.insert(item)
+        
+        // Explicitly save changes to ensure persistence
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving item: \(error.localizedDescription)")
+        }
+        
         dismiss()
     }
 } 
