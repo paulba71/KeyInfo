@@ -4,6 +4,7 @@ import SwiftUI
 
 @Model
 final class KeyItem {
+    var id: UUID = UUID()  // Default value for compatibility with existing data
     var label: String
     var value: String
     var iconName: String
@@ -13,6 +14,7 @@ final class KeyItem {
     var isLiked: Bool?
     
     init(label: String, value: String, iconName: String, category: String = "General", colorName: String = "blue", isLiked: Bool = false) {
+        self.id = UUID()
         self.label = label
         self.value = value
         self.iconName = iconName

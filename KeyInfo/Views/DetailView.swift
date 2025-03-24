@@ -4,27 +4,34 @@ struct DetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
-    @State private var isEditing = false
+    @State private var isEditing: Bool
     @State private var showingDeleteAlert = false
     @State private var editedLabel: String
     @State private var editedValue: String
     @State private var editedCategory: String
     @State private var editedColorName: String
     @State private var showCopiedMessage = false
+    @State private var isViewLoaded = false
     
+    // Store the item ID for better identity tracking
+    private let itemID: UUID
     let item: KeyItem
-    var onDelete: () -> Void
-    var isReadOnly: Bool
+    let onDelete: () -> Void
+    let isReadOnly: Bool
     
     init(item: KeyItem, onDelete: @escaping () -> Void, startEditing: Bool = false, isReadOnly: Bool = false) {
+        print("Initializing DetailView for item: \(item.label), ID: \(item.id)")
         self.item = item
+        self.itemID = item.id
         self.onDelete = onDelete
         self.isReadOnly = isReadOnly
+        
+        // Initialize state properties
+        _isEditing = State(initialValue: startEditing && !isReadOnly)
         _editedLabel = State(initialValue: item.label)
         _editedValue = State(initialValue: item.value)
         _editedCategory = State(initialValue: item.category)
         _editedColorName = State(initialValue: item.colorName)
-        _isEditing = State(initialValue: startEditing && !isReadOnly)
     }
     
     var body: some View {
@@ -89,7 +96,7 @@ struct DetailView: View {
                                 }
                             }
                         } else {
-                            // Read-only mode - show copy option
+                            // Read-only mode - show copy option and dismiss button
                             Button {
                                 UIPasteboard.general.string = item.value
                                 withAnimation {
@@ -104,13 +111,23 @@ struct DetailView: View {
                                 Image(systemName: "doc.on.doc")
                             }
                             
-                            if !isEditing {
-                                Button {
-                                    isEditing = true
-                                } label: {
-                                    Image(systemName: "pencil")
-                                }
-                                .disabled(isReadOnly)
+                            Button("Done") {
+                                dismiss()
+                            }
+                        }
+                    }
+                }
+                
+                // Add a dedicated dismiss button for better UX
+                ToolbarItem(placement: .cancellationAction) {
+                    if isEditing || !isReadOnly {
+                        Button("Done") {
+                            // If editing, cancel edits first
+                            if isEditing {
+                                isEditing = false
+                                resetEditedValues()
+                            } else {
+                                dismiss()
                             }
                         }
                     }
@@ -145,6 +162,11 @@ struct DetailView: View {
                 }
             } message: {
                 Text("Are you sure you want to delete this item? This action cannot be undone.")
+            }
+            .onAppear {
+                // Force view refresh on appear
+                isViewLoaded = true
+                print("DetailView appeared for item: \(item.label), ID: \(item.id)")
             }
         }
     }

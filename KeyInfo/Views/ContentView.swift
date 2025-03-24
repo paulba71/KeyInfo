@@ -13,8 +13,14 @@ struct ContentView: View {
     @State private var showingAboutSheet = false
     @AppStorage("isGroupedByCategory") private var isGroupedByCategory = true
     @State private var showingSettingsSheet = false
-    @State private var activeItem: KeyItem?
-    @State private var showingDetailSheet = false
+    
+    // Create an Identifiable wrapper for UUID
+    struct IdentifiableUUID: Identifiable {
+        let id: UUID
+    }
+    
+    // Track the selected item ID
+    @State private var detailItem: IdentifiableUUID? = nil
     @State private var editModeActive = false
     
     enum SortOption: String, CaseIterable {
@@ -119,18 +125,30 @@ struct ContentView: View {
             .sheet(isPresented: $showingSettingsSheet) {
                 SettingsView()
             }
-            .sheet(isPresented: $showingDetailSheet) {
-                if let item = activeItem {
+            .fullScreenCover(item: $detailItem, onDismiss: {
+                // Reset edit mode on dismiss
+                self.editModeActive = false
+            }) { idWrapper in
+                // Look up the item each time
+                if let item = items.first(where: { $0.id == idWrapper.id }) {
                     NavigationStack {
                         DetailView(
                             item: item,
                             onDelete: { 
                                 deleteItem(item)
-                                showingDetailSheet = false
+                                detailItem = nil  // Dismiss by setting to nil
                             },
                             startEditing: editModeActive,
                             isReadOnly: !editModeActive
                         )
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarLeading) {
+                                Button("Close") {
+                                    // Dismiss by setting ID to nil
+                                    detailItem = nil
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -144,27 +162,14 @@ struct ContentView: View {
             if !favorites.isEmpty {
                 Section(header: Text("⭐ Favorites")) {
                     ForEach(favorites) { item in
-                        ZStack {
-                            NavigationLink(destination: DetailView(
-                                item: item, 
-                                onDelete: { deleteItem(item) },
-                                isReadOnly: true
-                            )) {
-                                EmptyView()
-                            }
-                            .opacity(0)
-                            .buttonStyle(.plain)
-                            
-                            KeyItemRow(item: item, onLikeToggle: {
-                                toggleLike(item)
-                            }, onViewDetails: {
-                                // We use a programmatic approach to trigger the navigation
-                                navigateToItem(item)
-                            })
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                copyToClipboard(item.value)
-                            }
+                        KeyItemRow(item: item, onLikeToggle: {
+                            toggleLike(item)
+                        }, onViewDetails: {
+                            openItemDetails(item)
+                        })
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            copyToClipboard(item.value)
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
@@ -174,7 +179,7 @@ struct ContentView: View {
                             }
                             
                             Button {
-                                navigateToItem(item, startEditing: true)
+                                openItemEdit(item)
                             } label: {
                                 Label("Edit", systemImage: "pencil")
                             }
@@ -193,27 +198,14 @@ struct ContentView: View {
             ForEach(groupedItems.keys.sorted(), id: \.self) { category in
                 Section(header: Text(category)) {
                     ForEach(groupedItems[category] ?? []) { item in
-                        ZStack {
-                            NavigationLink(destination: DetailView(
-                                item: item, 
-                                onDelete: { deleteItem(item) },
-                                isReadOnly: true
-                            )) {
-                                EmptyView()
-                            }
-                            .opacity(0)
-                            .buttonStyle(.plain)
-                            
-                            KeyItemRow(item: item, onLikeToggle: {
-                                toggleLike(item)
-                            }, onViewDetails: {
-                                // We use a programmatic approach to trigger the navigation
-                                navigateToItem(item)
-                            })
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                copyToClipboard(item.value)
-                            }
+                        KeyItemRow(item: item, onLikeToggle: {
+                            toggleLike(item)
+                        }, onViewDetails: {
+                            openItemDetails(item)
+                        })
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            copyToClipboard(item.value)
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
@@ -223,7 +215,7 @@ struct ContentView: View {
                             }
                             
                             Button {
-                                navigateToItem(item, startEditing: true)
+                                openItemEdit(item)
                             } label: {
                                 Label("Edit", systemImage: "pencil")
                             }
@@ -244,27 +236,14 @@ struct ContentView: View {
     private var flatListView: some View {
         List {
             ForEach(filteredItems) { item in
-                ZStack {
-                    NavigationLink(destination: DetailView(
-                        item: item, 
-                        onDelete: { deleteItem(item) },
-                        isReadOnly: true
-                    )) {
-                        EmptyView()
-                    }
-                    .opacity(0)
-                    .buttonStyle(.plain)
-                    
-                    KeyItemRow(item: item, onLikeToggle: {
-                        toggleLike(item)
-                    }, onViewDetails: {
-                        // We use a programmatic approach to trigger the navigation
-                        navigateToItem(item)
-                    })
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        copyToClipboard(item.value)
-                    }
+                KeyItemRow(item: item, onLikeToggle: {
+                    toggleLike(item)
+                }, onViewDetails: {
+                    openItemDetails(item)
+                })
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    copyToClipboard(item.value)
                 }
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {
@@ -274,7 +253,7 @@ struct ContentView: View {
                     }
                     
                     Button {
-                        navigateToItem(item, startEditing: true)
+                        openItemEdit(item)
                     } label: {
                         Label("Edit", systemImage: "pencil")
                     }
@@ -431,20 +410,25 @@ struct ContentView: View {
         }
     }
     
-    // Add these helper methods for navigation
-    private func navigateToItem(_ item: KeyItem, startEditing: Bool = false) {
-        activeItem = item
-        editModeActive = startEditing
-        showingDetailSheet = true
+    // Navigation methods updated to use IdentifiableUUID
+    private func openItemDetails(_ item: KeyItem) {
+        print("Opening details for item: \(item.label), ID: \(item.id)")
+        
+        // Set edit mode first
+        self.editModeActive = false
+        
+        // Then update the item to trigger the fullScreenCover
+        self.detailItem = IdentifiableUUID(id: item.id)
     }
     
-    private func navigateToDetails(_ item: KeyItem) {
-        // We rely on the NavigationLink to handle the navigation
-        // The onViewDetails callback is just to capture the tap
-    }
-    
-    private func navigateToEdit(_ item: KeyItem) {
-        // Implementation will use the NavigationLink but with edit mode enabled
+    private func openItemEdit(_ item: KeyItem) {
+        print("Opening edit for item: \(item.label), ID: \(item.id)")
+        
+        // Set edit mode first
+        self.editModeActive = true
+        
+        // Then update the item to trigger the fullScreenCover
+        self.detailItem = IdentifiableUUID(id: item.id)
     }
 }
 
